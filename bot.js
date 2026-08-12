@@ -168,11 +168,15 @@ client.on('interactionCreate', async (interaction) => {
               results.slice(0, 25).map((track, idx) => ({
                 label: `${track.title}`,
                 description: `${track.artist.name} • ${track.album.title}`,
-                value: JSON.stringify(track),
+                value: track.id.toString(),
               }))
             );
 
           const row = new ActionRowBuilder().addComponents(selectMenu);
+          
+          // Stocker les résultats temporairement
+          playerMessages.set(`search_${interaction.user.id}`, results);
+          
           await interaction.editReply({ content: '📋 Résultats de recherche:', components: [row] });
           break;
         }
@@ -289,11 +293,24 @@ client.on('interactionCreate', async (interaction) => {
       await interaction.deferReply();
       
       if (interaction.customId === 'select_track') {
-        const track = JSON.parse(interaction.values[0]);
+        const trackId = interaction.values[0];
         const voiceChannel = interaction.member.voice.channel;
 
         if (!voiceChannel) {
           await interaction.editReply('❌ Tu dois être dans un channel vocal.');
+          return;
+        }
+
+        // Récupérer les résultats stockés
+        const results = playerMessages.get(`search_${interaction.user.id}`);
+        if (!results) {
+          await interaction.editReply('❌ Résultats expirés.');
+          return;
+        }
+
+        const track = results.find(t => t.id.toString() === trackId);
+        if (!track) {
+          await interaction.editReply('❌ Track non trouvé.');
           return;
         }
 
