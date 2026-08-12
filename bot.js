@@ -127,7 +127,7 @@ client.on('interactionCreate', async (interaction) => {
 
   try {
     if (interaction.isCommand()) {
-      await interaction.deferReply();
+      await interaction.deferReply({ ephemeral: false }).catch(() => {});
 
       switch (commandName) {
         case 'search': {
