@@ -1,7 +1,6 @@
 const { Client, GatewayIntentBits, SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { DisTube } = require('distube');
 const { SpotifyPlugin } = require('@distube/spotify');
-const { DeezerPlugin } = require('@distube/deezer');
 require('dotenv').config();
 
 const client = new Client({
@@ -18,7 +17,6 @@ const distube = new DisTube(client, {
   leaveOnFinish: false,
   emitNewSongOnly: true,
   plugins: [
-    new DeezerPlugin(),
     new SpotifyPlugin(),
   ],
 });
