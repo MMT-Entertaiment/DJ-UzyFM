@@ -201,8 +201,12 @@ client.on('interactionCreate', async (interaction) => {
           break;
         }
 
-        await voiceChannel.join();
-        await interaction.editReply(`✅ Bot rejoint: ${voiceChannel.name}`);
+        try {
+          await distube.voices.join(voiceChannel);
+          await interaction.editReply(`✅ Bot rejoint: ${voiceChannel.name}`);
+        } catch (e) {
+          await interaction.editReply(`❌ Erreur: ${e.message}`);
+        }
         break;
       }
 
