@@ -1,7 +1,9 @@
 const { Client, GatewayIntentBits, SlashCommandBuilder, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, EmbedBuilder } = require('discord.js');
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, entersState, VoiceConnectionStatus } = require('@discordjs/voice');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, entersState, VoiceConnectionStatus, StreamType } = require('@discordjs/voice');
 const { DeezerAPI } = require('./deezer.js');
 const { MusicQueue } = require('./dj-queue.js');
+const { spawn } = require('child_process');
+const path = require('path');
 require('dotenv').config();
 
 const client = new Client({
@@ -58,7 +60,19 @@ async function playTrack(guild, voiceChannel, track) {
     }
 
     try {
-      const resource = createAudioResource(track.preview || track.link);
+      const ffmpeg = spawn('ffmpeg', [
+        '-i', track.preview || track.link,
+        '-f', 's16le',
+        '-c:a', 'libopus',
+        '-ar', '48000',
+        '-ac', '2',
+        'pipe:1',
+      ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+      const resource = createAudioResource(ffmpeg.stdout, {
+        inputType: StreamType.Raw,
+      });
+      
       player.play(resource);
       connection.subscribe(player);
       
