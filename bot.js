@@ -63,7 +63,6 @@ async function playTrack(guild, voiceChannel, track) {
       connection.subscribe(player);
       
       console.log(`▶️ Lecture: ${track.title} - ${track.artist.name}`);
-      updatePlayerEmbed(guild, track);
     } catch (err) {
       console.error('Audio resource error:', err);
     }
@@ -213,10 +212,10 @@ client.on('interactionCreate', async (interaction) => {
 
           const track = results[0];
           const queue = getQueue(guild.id);
-          queue.addTrack(track);
 
-          await playTrack(guild, voiceChannel, track);
           await interaction.editReply(`▶️ Maintenant en lecture: **${track.title}** - ${track.artist.name}`);
+          
+          await playTrack(guild, voiceChannel, track);
           break;
         }
 
