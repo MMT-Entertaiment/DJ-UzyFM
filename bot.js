@@ -47,13 +47,26 @@ async function playTrack(guild, voiceChannel, track) {
     if (!player) {
       player = createAudioPlayer();
       players.set(guild.id, player);
+      
+      player.on(AudioPlayerStatus.Playing, () => {
+        console.log('🎵 Musique en lecture');
+      });
+      
+      player.on('error', error => {
+        console.error('Player error:', error);
+      });
     }
 
-    const resource = createAudioResource(track.preview || track.link);
-    player.play(resource);
-    connection.subscribe(player);
-    
-    updatePlayerEmbed(guild, track);
+    try {
+      const resource = createAudioResource(track.preview || track.link);
+      player.play(resource);
+      connection.subscribe(player);
+      
+      console.log(`▶️ Lecture: ${track.title} - ${track.artist.name}`);
+      updatePlayerEmbed(guild, track);
+    } catch (err) {
+      console.error('Audio resource error:', err);
+    }
   } catch (err) {
     console.error('Play error:', err);
   }
