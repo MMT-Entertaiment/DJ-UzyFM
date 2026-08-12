@@ -1,21 +1,21 @@
 {
-  "name": "dj-uzyfm-deezer",
+  "name": "dj-uzyfm-distube",
   "version": "1.0.0",
-  "description": "Bot Discord pour musique avec Deezer API",
-  "main": "bot.js",
+  "description": "Bot Discord pour musique avec DisTube",
+  "main": "bot-distube.js",
   "scripts": {
-    "start": "node bot.js",
-    "dev": "nodemon bot.js"
+    "start": "node bot-distube.js",
+    "dev": "nodemon bot-distube.js"
   },
   "dependencies": {
     "discord.js": "^14.14.1",
-    "@discordjs/voice": "^0.16.1",
-    "@discordjs/opus": "^0.9.0",
-    "ffmpeg-static": "^5.2.0",
-    "axios": "^1.6.2",
+    "distube": "^4.2.0",
+    "@distube/spotify": "^2.0.0",
+    "@distube/deezer": "^1.5.0",
     "dotenv": "^16.3.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
   }
 }
+
