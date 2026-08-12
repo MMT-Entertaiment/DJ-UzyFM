@@ -1,9 +1,7 @@
-const { Client, GatewayIntentBits, SlashCommandBuilder, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, EmbedBuilder } = require('discord.js');
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, entersState, VoiceConnectionStatus, StreamType } = require('@discordjs/voice');
-const { DeezerAPI } = require('./deezer.js');
-const { MusicQueue } = require('./dj-queue.js');
-const { spawn } = require('child_process');
-const path = require('path');
+const { Client, GatewayIntentBits, SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { DisTube } = require('distube');
+const { SpotifyPlugin } = require('@distube/spotify');
+const { DeezerPlugin } = require('@distube/deezer');
 require('dotenv').config();
 
 const client = new Client({
@@ -16,115 +14,16 @@ const client = new Client({
   ],
 });
 
-const deezer = new DeezerAPI();
+const distube = new DisTube(client, {
+  leaveOnFinish: false,
+  emitNewSongOnly: true,
+  plugins: [
+    new DeezerPlugin(),
+    new SpotifyPlugin(),
+  ],
+});
+
 const queues = new Map();
-const connections = new Map();
-const players = new Map();
-const playerMessages = new Map();
-
-function getQueue(guildId) {
-  if (!queues.has(guildId)) {
-    queues.set(guildId, new MusicQueue());
-  }
-  return queues.get(guildId);
-}
-
-async function playTrack(guild, voiceChannel, track) {
-  try {
-    let connection = connections.get(guild.id);
-    
-    if (!connection) {
-      connection = joinVoiceChannel({
-        channelId: voiceChannel.id,
-        guildId: guild.id,
-        adapterCreator: guild.voiceAdapterCreator,
-      });
-      connections.set(guild.id, connection);
-    }
-
-    const queue = getQueue(guild.id);
-    queue.addTrack(track);
-
-    let player = players.get(guild.id);
-    if (!player) {
-      player = createAudioPlayer();
-      players.set(guild.id, player);
-      
-      player.on(AudioPlayerStatus.Playing, () => {
-        console.log('🎵 Musique en lecture');
-      });
-      
-      player.on('error', error => {
-        console.error('Player error:', error);
-      });
-    }
-
-    try {
-      const ffmpeg = spawn('ffmpeg', [
-        '-i', track.preview || track.link,
-        '-f', 's16le',
-        '-c:a', 'libopus',
-        '-ar', '48000',
-        '-ac', '2',
-        'pipe:1',
-      ], { stdio: ['ignore', 'pipe', 'pipe'] });
-
-      const resource = createAudioResource(ffmpeg.stdout, {
-        inputType: StreamType.Raw,
-      });
-      
-      player.play(resource);
-      connection.subscribe(player);
-      
-      console.log(`▶️ Lecture: ${track.title} - ${track.artist.name}`);
-    } catch (err) {
-      console.error('Audio resource error:', err);
-    }
-  } catch (err) {
-    console.error('Play error:', err);
-  }
-}
-
-async function updatePlayerEmbed(guild, track) {
-  const queue = getQueue(guild.id);
-  const textChannel = guild.channels.cache.find(ch => ch.type === ChannelType.GuildText);
-  
-  if (!textChannel) return;
-
-  const trackIndex = queue.tracks.indexOf(track) + 1;
-
-  const embed = new EmbedBuilder()
-    .setColor('#FF0000')
-    .setTitle('DJ-UzyFM')
-    .setDescription(`**${track.title}** (${track.album.title}) – ${track.artist.name}`)
-    .setThumbnail(track.album.cover_medium)
-    .setFooter({ text: `${trackIndex}/${queue.tracks.length}` });
-
-  const backBtn = new ButtonBuilder()
-    .setCustomId('btn_back')
-    .setLabel('⏪')
-    .setStyle(ButtonStyle.Secondary);
-
-  const playBtn = new ButtonBuilder()
-    .setCustomId('btn_play')
-    .setLabel('⏯️')
-    .setStyle(ButtonStyle.Primary);
-
-  const skipBtn = new ButtonBuilder()
-    .setCustomId('btn_skip')
-    .setLabel('⏩')
-    .setStyle(ButtonStyle.Secondary);
-
-  const deezerBtn = new ButtonBuilder()
-    .setURL(track.link)
-    .setLabel('Open in Deezer')
-    .setStyle(ButtonStyle.Link);
-
-  const row = new ActionRowBuilder().addComponents(backBtn, playBtn, skipBtn, deezerBtn);
-  
-  const msg = await textChannel.send({ embeds: [embed], components: [row] });
-  playerMessages.set(guild.id, msg.id);
-}
 
 client.once('ready', async () => {
   console.log(`✓ Bot connecté : ${client.user.tag}`);
@@ -132,17 +31,33 @@ client.once('ready', async () => {
   const commands = [
     new SlashCommandBuilder()
       .setName('search')
-      .setDescription('Cherche une musique sur Deezer')
-      .addStringOption(opt => opt.setName('musique').setDescription('Nom de la musique').setRequired(true))
-      .addStringOption(opt => opt.setName('artiste').setDescription('Nom de l\'artiste').setRequired(false))
-      .addStringOption(opt => opt.setName('album').setDescription('Nom de l\'album').setRequired(false)),
+      .setDescription('Cherche une musique')
+      .addStringOption(opt => opt.setName('query').setDescription('Titre ou artiste').setRequired(true)),
 
     new SlashCommandBuilder()
       .setName('play')
-      .setDescription('Joue une musique directement')
-      .addStringOption(opt => opt.setName('musique').setDescription('Nom de la musique').setRequired(true))
-      .addStringOption(opt => opt.setName('artiste').setDescription('Nom de l\'artiste').setRequired(false))
-      .addStringOption(opt => opt.setName('album').setDescription('Nom de l\'album').setRequired(false)),
+      .setDescription('Joue une musique')
+      .addStringOption(opt => opt.setName('query').setDescription('Titre ou artiste').setRequired(true)),
+
+    new SlashCommandBuilder()
+      .setName('stop')
+      .setDescription('Arrête la musique'),
+
+    new SlashCommandBuilder()
+      .setName('skip')
+      .setDescription('Passe à la musique suivante'),
+
+    new SlashCommandBuilder()
+      .setName('pause')
+      .setDescription('Met en pause'),
+
+    new SlashCommandBuilder()
+      .setName('resume')
+      .setDescription('Reprend la musique'),
+
+    new SlashCommandBuilder()
+      .setName('queue')
+      .setDescription('Affiche la queue'),
 
     new SlashCommandBuilder()
       .setName('join')
@@ -150,15 +65,7 @@ client.once('ready', async () => {
 
     new SlashCommandBuilder()
       .setName('leave')
-      .setDescription('Fait partir le bot du channel vocal'),
-
-    new SlashCommandBuilder()
-      .setName('non-stop')
-      .setDescription('Crée et joue une playlist aléatoire'),
-
-    new SlashCommandBuilder()
-      .setName('restart')
-      .setDescription('Redémarre le bot dans le channel vocal'),
+      .setDescription('Fait partir le bot'),
   ];
 
   await client.application.commands.set(commands);
@@ -166,219 +73,171 @@ client.once('ready', async () => {
 });
 
 client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isCommand() && !interaction.isStringSelectMenu() && !interaction.isButton()) return;
+  if (!interaction.isChatInputCommand()) return;
 
-  const { commandName, member, guild, channel } = interaction;
+  const { commandName, member, guild } = interaction;
 
   try {
-    if (interaction.isCommand()) {
-      await interaction.deferReply({ ephemeral: false }).catch(() => {});
+    await interaction.deferReply();
 
-      switch (commandName) {
-        case 'search': {
-          const musique = interaction.options.getString('musique');
-          const artiste = interaction.options.getString('artiste');
-          const album = interaction.options.getString('album');
-          
-          const results = await deezer.search(musique, artiste, album);
-          
-          if (results.length === 0) {
-            await interaction.editReply('❌ Aucun résultat trouvé.');
-            break;
-          }
-
-          const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId('select_track')
-            .setPlaceholder('Choisis une musique...')
-            .addOptions(
-              results.slice(0, 25).map((track, idx) => ({
-                label: `${track.title}`,
-                description: `${track.artist.name} • ${track.album.title}`,
-                value: track.id.toString(),
-              }))
-            );
-
-          const row = new ActionRowBuilder().addComponents(selectMenu);
-          
-          // Stocker les résultats temporairement
-          playerMessages.set(`search_${interaction.user.id}`, results);
-          
-          await interaction.editReply({ content: '📋 Résultats de recherche:', components: [row] });
-          break;
-        }
-
-        case 'play': {
-          const musique = interaction.options.getString('musique');
-          const artiste = interaction.options.getString('artiste');
-          const album = interaction.options.getString('album');
-
-          const voiceChannel = member.voice.channel;
-          if (!voiceChannel) {
-            await interaction.editReply('❌ Tu dois être dans un channel vocal.');
-            break;
-          }
-
-          const results = await deezer.search(musique, artiste, album);
-          if (results.length === 0) {
-            await interaction.editReply('❌ Aucun résultat trouvé.');
-            break;
-          }
-
-          const track = results[0];
-          const queue = getQueue(guild.id);
-
-          await interaction.editReply(`▶️ Maintenant en lecture: **${track.title}** - ${track.artist.name}`);
-          
-          await playTrack(guild, voiceChannel, track);
-          break;
-        }
-
-        case 'join': {
-          const voiceChannel = member.voice.channel;
-          if (!voiceChannel) {
-            await interaction.editReply('❌ Tu dois être dans un channel vocal.');
-            break;
-          }
-
-          try {
-            const connection = joinVoiceChannel({
-              channelId: voiceChannel.id,
-              guildId: guild.id,
-              adapterCreator: guild.voiceAdapterCreator,
-            });
-            connections.set(guild.id, connection);
-            await interaction.editReply(`✅ Bot rejoint: ${voiceChannel.name}`);
-          } catch (e) {
-            console.error('Join error:', e);
-            await interaction.editReply(`❌ Erreur: ${e.message}`);
-          }
-          break;
-        }
-
-        case 'leave': {
-          try {
-            const connection = connections.get(guild.id);
-            if (connection) {
-              connection.destroy();
-              connections.delete(guild.id);
-            }
-            await interaction.editReply(`✅ Bot parti du channel vocal.`);
-          } catch (e) {
-            await interaction.editReply(`❌ Erreur: ${e.message}`);
-          }
-          break;
-        }
-
-        case 'non-stop': {
-          const voiceChannel = member.voice.channel;
-          if (!voiceChannel) {
-            await interaction.editReply('❌ Tu dois être dans un channel vocal.');
-            break;
-          }
-
-          const randomTracks = await deezer.getRandomPlaylist();
-          const queue = getQueue(guild.id);
-          randomTracks.forEach(t => queue.addTrack(t));
-
-          await playTrack(guild, voiceChannel, randomTracks[0]);
-          await interaction.editReply(`🎵 Playlist aléatoire créée avec ${randomTracks.length} musiques!`);
-          break;
-        }
-
-        case 'restart': {
-          const voiceChannel = member.voice.channel;
-          if (!voiceChannel) {
-            await interaction.editReply('❌ Tu dois être dans un channel vocal.');
-            break;
-          }
-
-          try {
-            const connection = connections.get(guild.id);
-            if (connection) {
-              connection.destroy();
-              connections.delete(guild.id);
-            }
-            
-            await new Promise(r => setTimeout(r, 500));
-            
-            const newConnection = joinVoiceChannel({
-              channelId: voiceChannel.id,
-              guildId: guild.id,
-              adapterCreator: guild.voiceAdapterCreator,
-            });
-            connections.set(guild.id, newConnection);
-            
-            await interaction.editReply(`🔄 Bot redémarré dans ${voiceChannel.name}`);
-          } catch (e) {
-            await interaction.editReply(`❌ Erreur: ${e.message}`);
-          }
-          break;
-        }
-      }
-    } else if (interaction.isStringSelectMenu()) {
-      await interaction.deferReply();
-      
-      if (interaction.customId === 'select_track') {
-        const trackId = interaction.values[0];
-        const voiceChannel = interaction.member.voice.channel;
+    switch (commandName) {
+      case 'play': {
+        const query = interaction.options.getString('query');
+        const voiceChannel = member.voice.channel;
 
         if (!voiceChannel) {
           await interaction.editReply('❌ Tu dois être dans un channel vocal.');
-          return;
+          break;
         }
 
-        // Récupérer les résultats stockés
-        const results = playerMessages.get(`search_${interaction.user.id}`);
-        if (!results) {
-          await interaction.editReply('❌ Résultats expirés.');
-          return;
+        try {
+          await distube.play(voiceChannel, query, {
+            member: interaction.member,
+            textChannel: interaction.channel,
+            interaction: interaction,
+          });
+          await interaction.editReply(`▶️ En cours de lecture...`);
+        } catch (e) {
+          await interaction.editReply(`❌ Erreur: ${e.message}`);
         }
-
-        const track = results.find(t => t.id.toString() === trackId);
-        if (!track) {
-          await interaction.editReply('❌ Track non trouvé.');
-          return;
-        }
-
-        const queue = getQueue(interaction.guild.id);
-        queue.addTrack(track);
-
-        await playTrack(interaction.guild, voiceChannel, track);
-        await interaction.editReply(`▶️ Ajouté à la queue: **${track.title}** - ${track.artist.name}`);
+        break;
       }
-    } else if (interaction.isButton()) {
-      await interaction.deferReply();
-      
-      const queue = getQueue(guild.id);
-      
-      switch (interaction.customId) {
-        case 'btn_skip':
-          const nextTrack = queue.skipNext();
-          if (nextTrack) {
-            await interaction.editReply(`⏩ Track suivant: **${nextTrack.title}**`);
-          } else {
-            await interaction.editReply('❌ Pas de track suivant.');
-          }
+
+      case 'search': {
+        const query = interaction.options.getString('query');
+        const results = await distube.search(query, { limit: 5 });
+
+        if (results.length === 0) {
+          await interaction.editReply('❌ Aucun résultat trouvé.');
           break;
-        
-        case 'btn_back':
-          const prevTrack = queue.skipPrevious();
-          if (prevTrack) {
-            await interaction.editReply(`⏪ Track précédent: **${prevTrack.title}**`);
-          } else {
-            await interaction.editReply('❌ Pas de track précédent.');
-          }
+        }
+
+        const embed = new EmbedBuilder()
+          .setColor('#FF0000')
+          .setTitle('🔍 Résultats de recherche')
+          .setDescription(results.map((s, i) => `${i + 1}. **${s.name}** - ${s.source}`).join('\n'));
+
+        await interaction.editReply({ embeds: [embed] });
+        break;
+      }
+
+      case 'skip': {
+        const queue = distube.getQueue(guild.id);
+        if (!queue) {
+          await interaction.editReply('❌ Aucune musique en lecture.');
           break;
-        
-        case 'btn_play':
-          await interaction.editReply('⏯️ Play/Pause (à implémenter)');
+        }
+
+        queue.skip();
+        await interaction.editReply('⏩ Musique suivante...');
+        break;
+      }
+
+      case 'stop': {
+        const queue = distube.getQueue(guild.id);
+        if (!queue) {
+          await interaction.editReply('❌ Aucune musique en lecture.');
           break;
+        }
+
+        queue.stop();
+        await interaction.editReply('⏹️ Musique arrêtée.');
+        break;
+      }
+
+      case 'pause': {
+        const queue = distube.getQueue(guild.id);
+        if (!queue) {
+          await interaction.editReply('❌ Aucune musique en lecture.');
+          break;
+        }
+
+        if (queue.paused) {
+          await interaction.editReply('⏸️ Déjà en pause.');
+          break;
+        }
+
+        queue.pause();
+        await interaction.editReply('⏸️ Musique en pause.');
+        break;
+      }
+
+      case 'resume': {
+        const queue = distube.getQueue(guild.id);
+        if (!queue) {
+          await interaction.editReply('❌ Aucune musique en lecture.');
+          break;
+        }
+
+        if (!queue.paused) {
+          await interaction.editReply('▶️ Déjà en lecture.');
+          break;
+        }
+
+        queue.resume();
+        await interaction.editReply('▶️ Musique reprise.');
+        break;
+      }
+
+      case 'queue': {
+        const queue = distube.getQueue(guild.id);
+        if (!queue || queue.songs.length === 0) {
+          await interaction.editReply('❌ Queue vide.');
+          break;
+        }
+
+        const embed = new EmbedBuilder()
+          .setColor('#FF0000')
+          .setTitle('📋 Queue')
+          .setDescription(queue.songs.slice(0, 10).map((s, i) => `${i + 1}. **${s.name}** (${s.source})`).join('\n'))
+          .setFooter({ text: `Total: ${queue.songs.length} musiques` });
+
+        await interaction.editReply({ embeds: [embed] });
+        break;
+      }
+
+      case 'join': {
+        const voiceChannel = member.voice.channel;
+        if (!voiceChannel) {
+          await interaction.editReply('❌ Tu dois être dans un channel vocal.');
+          break;
+        }
+
+        await voiceChannel.join();
+        await interaction.editReply(`✅ Bot rejoint: ${voiceChannel.name}`);
+        break;
+      }
+
+      case 'leave': {
+        const queue = distube.getQueue(guild.id);
+        if (queue) {
+          queue.stop();
+        }
+        await interaction.editReply('✅ Bot parti.');
+        break;
       }
     }
   } catch (err) {
     console.error('Interaction error:', err);
     await interaction.editReply('❌ Erreur lors du traitement.');
   }
+});
+
+distube.on('playSong', (queue, song) => {
+  queue.textChannel?.send(
+    `🎵 **${song.name}** - ${song.uploader.name}\n⏱️ ${song.formattedDuration}`
+  );
+});
+
+distube.on('addSong', (queue, song) => {
+  queue.textChannel?.send(`➕ **${song.name}** ajoutée à la queue`);
+});
+
+distube.on('error', (channel, e) => {
+  if (channel) {
+    channel.send(`❌ Erreur: ${e.message}`);
+  }
+  console.error('DisTube error:', e);
 });
 
 client.login(process.env.DISCORD_TOKEN);
