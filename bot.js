@@ -28,7 +28,7 @@ function getQueue(guildId) {
 
 async function playTrack(guild, voiceChannel, track) {
   try {
-    const connection = await voiceChannel.join();
+    const connection = await player.connections.join(voiceChannel);
     const queue = getQueue(guild.id);
     queue.addTrack(track);
 
@@ -191,8 +191,13 @@ client.on('interactionCreate', async (interaction) => {
             break;
           }
 
-          await voiceChannel.join();
-          await interaction.editReply(`✅ Bot rejoint: ${voiceChannel.name}`);
+          try {
+            const connection = await player.connections.join(voiceChannel);
+            await interaction.editReply(`✅ Bot rejoint: ${voiceChannel.name}`);
+          } catch (e) {
+            console.error('Join error:', e);
+            await interaction.editReply(`❌ Erreur: ${e.message}`);
+          }
           break;
         }
 
@@ -203,10 +208,11 @@ client.on('interactionCreate', async (interaction) => {
             break;
           }
 
-          const connection = voiceChannel.guild.voice?.connection;
-          if (connection) {
-            connection.disconnect();
+          try {
+            player.connections.leave(guild.id);
             await interaction.editReply(`✅ Bot parti du channel vocal.`);
+          } catch (e) {
+            await interaction.editReply(`❌ Erreur: ${e.message}`);
           }
           break;
         }
@@ -234,14 +240,14 @@ client.on('interactionCreate', async (interaction) => {
             break;
           }
 
-          const connection = voiceChannel.guild.voice?.connection;
-          if (connection) {
-            connection.disconnect();
+          try {
+            player.connections.leave(guild.id);
+            await new Promise(r => setTimeout(r, 500));
+            await player.connections.join(voiceChannel);
+            await interaction.editReply(`🔄 Bot redémarré dans ${voiceChannel.name}`);
+          } catch (e) {
+            await interaction.editReply(`❌ Erreur: ${e.message}`);
           }
-
-          await new Promise(r => setTimeout(r, 500));
-          await voiceChannel.join();
-          await interaction.editReply(`🔄 Bot redémarré dans ${voiceChannel.name}`);
           break;
         }
       }
