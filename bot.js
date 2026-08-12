@@ -1,5 +1,5 @@
 const { Client, GatewayIntentBits, SlashCommandBuilder, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, EmbedBuilder } = require('discord.js');
-const { Player } = require('discord-player');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, entersState, VoiceConnectionStatus } = require('@discordjs/voice');
 const { DeezerAPI } = require('./deezer.js');
 const { MusicQueue } = require('./dj-queue.js');
 require('dotenv').config();
@@ -14,9 +14,10 @@ const client = new Client({
   ],
 });
 
-const player = new Player(client);
 const deezer = new DeezerAPI();
 const queues = new Map();
+const connections = new Map();
+const players = new Map();
 const playerMessages = new Map();
 
 function getQueue(guildId) {
@@ -28,11 +29,29 @@ function getQueue(guildId) {
 
 async function playTrack(guild, voiceChannel, track) {
   try {
-    const connection = await player.connections.join(voiceChannel);
+    let connection = connections.get(guild.id);
+    
+    if (!connection) {
+      connection = joinVoiceChannel({
+        channelId: voiceChannel.id,
+        guildId: guild.id,
+        adapterCreator: guild.voiceAdapterCreator,
+      });
+      connections.set(guild.id, connection);
+    }
+
     const queue = getQueue(guild.id);
     queue.addTrack(track);
 
-    const resource = await player.play(connection, track.preview || track.link);
+    let player = players.get(guild.id);
+    if (!player) {
+      player = createAudioPlayer();
+      players.set(guild.id, player);
+    }
+
+    const resource = createAudioResource(track.preview || track.link);
+    player.play(resource);
+    connection.subscribe(player);
     
     updatePlayerEmbed(guild, track);
   } catch (err) {
@@ -192,7 +211,12 @@ client.on('interactionCreate', async (interaction) => {
           }
 
           try {
-            const connection = await player.connections.join(voiceChannel);
+            const connection = joinVoiceChannel({
+              channelId: voiceChannel.id,
+              guildId: guild.id,
+              adapterCreator: guild.voiceAdapterCreator,
+            });
+            connections.set(guild.id, connection);
             await interaction.editReply(`✅ Bot rejoint: ${voiceChannel.name}`);
           } catch (e) {
             console.error('Join error:', e);
@@ -202,14 +226,12 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         case 'leave': {
-          const voiceChannel = member.voice.channel;
-          if (!voiceChannel) {
-            await interaction.editReply('❌ Tu dois être dans un channel vocal.');
-            break;
-          }
-
           try {
-            player.connections.leave(guild.id);
+            const connection = connections.get(guild.id);
+            if (connection) {
+              connection.destroy();
+              connections.delete(guild.id);
+            }
             await interaction.editReply(`✅ Bot parti du channel vocal.`);
           } catch (e) {
             await interaction.editReply(`❌ Erreur: ${e.message}`);
@@ -241,9 +263,21 @@ client.on('interactionCreate', async (interaction) => {
           }
 
           try {
-            player.connections.leave(guild.id);
+            const connection = connections.get(guild.id);
+            if (connection) {
+              connection.destroy();
+              connections.delete(guild.id);
+            }
+            
             await new Promise(r => setTimeout(r, 500));
-            await player.connections.join(voiceChannel);
+            
+            const newConnection = joinVoiceChannel({
+              channelId: voiceChannel.id,
+              guildId: guild.id,
+              adapterCreator: guild.voiceAdapterCreator,
+            });
+            connections.set(guild.id, newConnection);
+            
             await interaction.editReply(`🔄 Bot redémarré dans ${voiceChannel.name}`);
           } catch (e) {
             await interaction.editReply(`❌ Erreur: ${e.message}`);
