@@ -16,6 +16,7 @@ class DeezerAPI {
           q: query,
           limit: 20,
         },
+        timeout: 5000,
       });
 
       return response.data.data.map(track => ({
@@ -42,6 +43,7 @@ class DeezerAPI {
         params: {
           limit: 50,
         },
+        timeout: 5000,
       });
 
       const artists = response.data.data;
@@ -53,6 +55,7 @@ class DeezerAPI {
             params: {
               limit: 5,
             },
+            timeout: 5000,
           });
           tracks.push(...artistTracks.data.data);
         } catch (e) {
